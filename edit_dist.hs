@@ -2,10 +2,8 @@ import qualified Data.Map.Strict as Map
 import           Data.Char
 import           Data.Maybe
 import           Data.List
-import           Data.Ord
 import           System.IO
 import           System.IO.Unsafe
---import Data.List.Extras.Argmax as AM
 
 {-# NOINLINE file' #-}
 file' :: String
@@ -16,21 +14,21 @@ file' = do
 dictOfWords :: [(String, Int)]
 dictOfWords = (countWords(wordsList(lowerWords(removePunc (file')))))
 
---(countWords(wordsList(lowerWords(removePunc word'))))
 lowerWords :: String -> String
 lowerWords word = map toLower word
 
--- Remove punctuation from text String.
+-- | Remove punctuation from text String.
 removePunc :: String -> String
 removePunc word = [w | w <- word, not (w `elem` ",.?!-:;\"\'")]
 
 wordsList :: String -> [String]
-wordsList word  = words word
+wordsList word = words word
 
+-- | maps how many times a word appears in the file
 countWords :: [String] -> [(String,Int)]
 countWords xs = map (\w -> (head w, length w)) $ group $ sort xs
 
--- | Probability of @word@.
+-- | Probability of word.
 probability :: String -> Double
 probability word = (/ n) $ fromIntegral $ fromMaybe 0 (Map.lookup word (Map.fromList dictOfWords) :: Maybe Int)
   where
@@ -42,7 +40,7 @@ helper (x:xs) | xs == []  = x
                        then helper xs
                        else helper (x:(drop 1 xs))
                        where p2 = probability (xs !! 0)
-                             p = probability x
+                             p  = probability x
 
 correction :: String -> String
 correction word = helper list
@@ -60,6 +58,7 @@ candidates word = head $ filter (not . null) s
 known :: [String] -> [String]
 known words' = [ w | w <- words', Map.member w (Map.fromList dictOfWords)]
 
+-- | All edits that one two edits away from word.
 edits1 :: String -> [String]
 edits1 word = deletes ++ transposes ++ replaces ++ inserts
   where
@@ -74,10 +73,7 @@ edits1 word = deletes ++ transposes ++ replaces ++ inserts
 edits2 :: String -> [String]
 edits2 word = [ e2 | e1 <- edits1 word, e2 <- edits1 e1 ]
 
---main :: IO ()
 main = do
-
-  --print $ dictOfWords
 
   wordToCorrect <- getLine            --wordToCorrect :: String
   let rightWordBe = correction wordToCorrect
