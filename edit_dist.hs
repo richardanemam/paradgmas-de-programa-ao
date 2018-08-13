@@ -1,63 +1,84 @@
-module Spelling (TrainingDict, nWords, correct) where
+import qualified Data.Map.Strict as Map
+import           Data.Char
+import           Data.Maybe
+import           Data.List
+import           Data.Ord
+import           System.IO
+import           System.IO.Unsafe
+--import Data.List.Extras.Argmax as AM
 
-import qualified Data.Map.Strict as M
-import qualified Data.ByteString.Char8 as B
-import qualified Data.Set as S
-import           Data.Ord (comparing)
-import           Data.List (sortBy, foldl')
-import           Data.Char (toLower, isAlpha)
-import Data.Char
-import System.IO
+{-# NOINLINE file' #-}
+file' :: String
+file' = do
+   word' <- (unsafePerformIO(readFile "Todas-as-obras-Machado-de-Assis.txt"))
+   return word'
 
-type WordSet = S.Set String
-type TrainingDict = M.Map String Int
+dictOfWords :: [(String, Int)]
+dictOfWords = (countWords(wordsList(lowerWords(removePunc (file')))))
 
---Todas-as-obras-Machado-de-Assis.txt
-
-nWords :: IO TrainingDict
-nWords = do
-  ws <-  B.readFile "teste.txt"
-  return (train(lowerWords(removePunc(B.unpack $ ws))))
-
-lowerWords :: String -> [String]
-lowerWords ws = words (map toLower ws)
+--(countWords(wordsList(lowerWords(removePunc word'))))
+lowerWords :: String -> String
+lowerWords word = map toLower word
 
 -- Remove punctuation from text String.
 removePunc :: String -> String
-removePunc xs = [x | x <- xs, not (x `elem` ",.?!-:;\"\'")]
+removePunc word = [w | w <- word, not (w `elem` ",.?!-:;\"\'")]
 
-train :: [String] -> TrainingDict
-train = foldl' (\acc x -> M.insertWith (+) x 1 acc) M.empty
+wordsList :: String -> [String]
+wordsList word  = words word
 
-edits1 :: String -> WordSet
-edits1 word = S.fromList $ deletes ++ transposes ++ replaces ++ inserts
+countWords :: [String] -> [(String,Int)]
+countWords xs = map (\w -> (head w, length w)) $ group $ sort xs
+
+-- | Probability of @word@.
+probability :: String -> Double
+probability word = (/ n) $ fromIntegral $ fromMaybe 0 (Map.lookup word (Map.fromList dictOfWords) :: Maybe Int)
   where
-    alphabet    = ['a'..'z']
+    n = fromIntegral $ Map.foldl' (+) 0 (Map.fromList dictOfWords)
+
+helper :: [String] -> String
+helper (x:xs) | xs == []  = x
+              | otherwise = if p2 > p
+                       then helper xs
+                       else helper (x:(drop 1 xs))
+                       where p2 = probability (xs !! 0)
+                             p = probability x
+
+correction :: String -> String
+correction word = helper list
+  where list = candidates word
+
+candidates :: String -> [String]
+candidates word = head $ filter (not . null) s
+  where
+    s = [ known [word]
+        , known $ edits1 word
+        , known $ edits2 word
+        , [word]
+        ]
+
+known :: [String] -> [String]
+known words' = [ w | w <- words', Map.member w (Map.fromList dictOfWords)]
+
+edits1 :: String -> [String]
+edits1 word = deletes ++ transposes ++ replaces ++ inserts
+  where
+    letters    = "abcdefghijklmnopqrstuvwxyz"
     splits     = [ splitAt i word                  | i <- [1 .. length word] ]
     deletes    = [ l ++ tail r                     | (l,r) <- splits, (not . null) r ]
     transposes = [ l ++ r !! 1 : head r : drop 2 r | (l,r) <- splits, length r > 1 ]
-    replaces   = [ l ++ c : tail r                 | (l,r) <- splits, (not . null) r, c <- alphabet ]
-    inserts    = [ l ++ c : r                      | (l,r) <- splits, c <- alphabet]
+    replaces   = [ l ++ c : tail r                 | (l,r) <- splits, (not . null) r, c <- letters ]
+    inserts    = [ l ++ c : r                      | (l,r) <- splits, c <- letters]
 
-edits2 :: String -> WordSet
-edits2 = S.foldl' S.union S.empty . S.map edits1 . edits1
+-- | All edits that are two edits away from @word@.
+edits2 :: String -> [String]
+edits2 word = [ e2 | e1 <- edits1 word, e2 <- edits1 e1 ]
 
-knownEdits2 :: String -> TrainingDict -> WordSet
-knownEdits2 w nwords = edits2 w `S.intersection` M.keysSet nwords
+--main :: IO ()
+main = do
 
-known :: WordSet -> TrainingDict -> WordSet
-known inputSet nwords = inputSet `S.intersection` M.keysSet nwords
+  --print $ dictOfWords
 
-choices :: String -> TrainingDict -> WordSet
-choices w ws = foldr orNextIfEmpty (S.singleton w)
-   [   known (S.singleton w) ws,
-       known (edits1 w) ws,
-       knownEdits2 w ws
-   ]
-   where orNextIfEmpty x y = if S.null x then y else x
-
-chooseBest :: WordSet -> TrainingDict -> B.ByteString
-chooseBest ch ws = maximumBy (compare `on` (\w -> M.findWithDefault 0 w ws)) (S.toList ch)
-
-correct :: TrainingDict -> String -> String
-correct ws w = chooseBest (choices w ws) ws
+  wordToCorrect <- getLine            --wordToCorrect :: String
+  let rightWordBe = correction wordToCorrect
+  print(rightWordBe)
