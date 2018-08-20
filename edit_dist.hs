@@ -3,16 +3,6 @@ import           Data.Char
 import           Data.Maybe
 import           Data.List
 import           System.IO
-import           System.IO.Unsafe
-
-{-# NOINLINE file' #-}
-file' :: String
-file' = do
-   word' <- (unsafePerformIO(readFile "Todas-as-obras-Machado-de-Assis.txt"))
-   return word'
-
-dictOfWords :: [(String, Int)]
-dictOfWords = (countWords(wordsList(lowerWords(removePunc (file')))))
 
 lowerWords :: String -> String
 lowerWords word = map toLower word
@@ -29,34 +19,34 @@ countWords :: [String] -> [(String,Int)]
 countWords xs = map (\w -> (head w, length w)) $ group $ sort xs
 
 -- | Probability of word.
-probability :: String -> Double
-probability word = (/ n) $ fromIntegral $ fromMaybe 0 (Map.lookup word (Map.fromList dictOfWords) :: Maybe Int)
+probability :: String -> [(String, Int)] -> Double
+probability word dictOfWords = (/ n) $ fromIntegral $ fromMaybe 0 (Map.lookup word (Map.fromList dictOfWords) :: Maybe Int)
   where
     n = fromIntegral $ Map.foldl' (+) 0 (Map.fromList dictOfWords)
 
-helper :: [String] -> String
-helper (x:xs) | xs == []  = x
-              | otherwise = if p2 > p
-                       then helper xs
-                       else helper (x:(drop 1 xs))
-                       where p2 = probability (xs !! 0)
-                             p  = probability x
+helper :: [String] -> [(String, Int)] -> String
+helper (x:xs) dictOfWords | xs == []  = x
+                          | otherwise = if p2 > p
+                                        then helper xs dictOfWords
+                                        else helper (x:(drop 1 xs)) dictOfWords
+                                        where p2 = probability (xs !! 0) dictOfWords
+                                              p  = probability x dictOfWords
 
-correction :: String -> String
-correction word = helper list
-  where list = candidates word
+correction :: String -> [(String, Int)] -> String
+correction word dictOfWords = helper list dictOfWords
+  where list = candidates word dictOfWords
 
-candidates :: String -> [String]
-candidates word = head $ filter (not . null) s
+candidates :: String -> [(String, Int)] -> [String]
+candidates word dictOfWords = head $ filter (not . null) s
   where
-    s = [ known [word]
-        , known $ edits1 word
-        , known $ edits2 word
+    s = [ known [word] dictOfWords
+        , known (edits1 word) dictOfWords
+        , known (edits2 word) dictOfWords
         , [word]
         ]
 
-known :: [String] -> [String]
-known words' = [ w | w <- words', Map.member w (Map.fromList dictOfWords)]
+known :: [String] -> [(String, Int)] -> [String]
+known words' dictOfWords = [ w | w <- words', Map.member w (Map.fromList dictOfWords)]
 
 -- | All edits that one two edits away from word.
 edits1 :: String -> [String]
@@ -73,8 +63,13 @@ edits1 word = deletes ++ transposes ++ replaces ++ inserts
 edits2 :: String -> [String]
 edits2 word = [ e2 | e1 <- edits1 word, e2 <- edits1 e1 ]
 
+main :: IO ()
 main = do
 
+  word <- readFile "Todas-as-obras-Machado-de-Assis.txt"
+  let dictOfWords = countWords(wordsList(lowerWords(removePunc (word))))
+
   wordToCorrect <- getLine            --wordToCorrect :: String
-  let rightWordBe = correction wordToCorrect
-  print(rightWordBe)
+  let rightWordBe = correction wordToCorrect dictOfWords
+  
+  print (rightWordBe)
